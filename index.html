@@ -8,7 +8,7 @@
 --serif:"Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua",Georgia,serif;--sans:"Helvetica Neue",Helvetica,"Segoe UI",system-ui,-apple-system,sans-serif;--mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;--g:clamp(16px,3vw,40px)}
 @media (prefers-color-scheme:dark){:root{--bg:#131315;--ink:#ECEAE5;--muted:#9a978f;--faint:#6b6962;--line:rgba(236,234,229,.16);--strong:rgba(236,234,229,.4);--acc:#ff7b86;--live:#4fd08e;--warn:#ffb347;--glass:rgba(19,19,21,.82)}}
 *{box-sizing:border-box}html,body{margin:0;height:100%;background:var(--bg);color:var(--ink)}
-body{font:13px/1.45 var(--sans);-webkit-font-smoothing:antialiased;overflow:hidden}
+body{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;font:13px/1.45 var(--sans);-webkit-font-smoothing:antialiased;overflow:hidden}
 button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
 #cv{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none;opacity:0;transition:opacity .8s}body.ready #cv{opacity:1}
 .label,.kicker{font:500 10.5px/1 var(--sans);letter-spacing:.2em;text-transform:uppercase;color:var(--muted)}
@@ -27,6 +27,7 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 small{display:block;color:var(--muted);font-size:11px}.m{color:var(--muted);margin:6px 0}.serif{font:italic 400 17px/1.2 var(--serif)}
 .r{margin:8px 0;padding-left:9px;border-left:2px solid var(--strong);font-size:12px}.r.bad{border-color:var(--acc)}.r.cond{border-color:var(--warn)}
 .btn{display:block;width:100%;margin-top:8px;border:1px solid var(--strong);padding:8px 10px;font:500 10.5px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;text-align:center}.btn:hover{background:var(--ink);color:var(--bg)}
+textarea,input{-webkit-user-select:text;user-select:text}
 input[type=range]{width:100%;accent-color:var(--ink)}textarea{width:100%;height:64px;margin-top:6px;background:transparent;color:var(--ink);border:1px solid var(--line);font:11px var(--mono)}
 details{margin-top:12px}summary{font:500 10.5px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;cursor:pointer;color:var(--muted)}
 .tray{position:fixed;left:0;right:0;bottom:0;padding:10px var(--g) calc(12px + env(safe-area-inset-bottom));background:linear-gradient(transparent,var(--bg) 24%);z-index:2}
@@ -577,6 +578,17 @@ const rotZ = a => { const c = Math.cos(a), s = Math.sin(a); return new Float32Ar
 const poseR = (yaw,ax,az) => m3(rotY(yaw), m3(rotX(ax), rotZ(az)));
 function rayBox(d,mn,mx){ let t0 = 0, t1 = 1e9; for (let i=0;i<3;i++){ if (Math.abs(d[i])<1e-6){ if (eye[i]<mn[i]||eye[i]>mx[i]) return null; continue; }
   let a = (mn[i]-eye[i])/d[i], c = (mx[i]-eye[i])/d[i]; if (a>c){ const x = a; a = c; c = x; } t0 = Math.max(t0,a); t1 = Math.min(t1,c); if (t0>t1) return null; } return t0; }
+function rayBoxN(d,mn,mx){ let t0 = 0, t1 = 1e9, ax = -1, sg = 0; for (let i=0;i<3;i++){ if (Math.abs(d[i])<1e-6){ if (eye[i]<mn[i]||eye[i]>mx[i]) return null; continue; }
+  let a = (mn[i]-eye[i])/d[i], c = (mx[i]-eye[i])/d[i], s = -1; if (a>c){ const x = a; a = c; c = x; s = 1; } if (a>t0){ t0 = a; ax = i; sg = s; } t1 = Math.min(t1,c); if (t0>t1) return null; }
+ return ax<0 ? null : {t:t0,ax,sg}; }
+function surfacePoint(){
+ const d = ray(ptr.x,ptr.y); let best = null;
+ if (d[1]<-1e-4){ const k = (GROUND-eye[1])/d[1]; if (k>0) best = {t:k,n:[0,1,0]}; }
+ const test = (mn,mx) => { const h = rayBoxN(d,mn,mx); if (h && (!best || h.t<best.t)){ const n = [0,0,0]; n[h.ax] = h.sg; best = {t:h.t,n}; } };
+ RBOX.forEach(b => test(b.mn,b.mx));
+ loose.forEach(l => { const c = B.byId(l.id); if (!c) return; const hs = hsRest(c,pieceInfo(c,canonSlot(c))); test([l.p[0]-hs[0],l.p[1]-hs[1],l.p[2]-hs[2]],[l.p[0]+hs[0],l.p[1]+hs[1],l.p[2]+hs[2]]); });
+ return best ? {p:vadd(eye,vsc(d,best.t)), n:best.n} : null;
+}
 function raySphere(d,c,r){ const oc = vsub(eye,c), b = dot(oc,d), cc = dot(oc,oc)-r*r, disc = b*b-cc; if (disc<0) return null; const t = -b-Math.sqrt(disc); return t>0 ? t : (-b+Math.sqrt(disc)>0 ? 0 : null); }
 
 // ---- modelo de una pieza suelta: se dibuja con las mismas funciones que las instaladas y se transforma
@@ -665,12 +677,13 @@ function snd(k){ if (muted) return; try { AC = AC || new (window.AudioContext||w
  o.connect(g); g.connect(AC.destination); o.start(t); o.stop(t+P[3]+.06); } catch(_){} }
 
 // ---- agarrar, mover, soltar
-let hold = null, ptr = {x:0,y:0}, lastT = 0, acc = 0, cand = null;
+let hinted = false; function hint(){ if (hinted) return; hinted = true; toast('El objeto se apoya en las superficies. Rueda del ratón (o un segundo dedo) para subirlo o bajarlo.'); }
+let hold = null, ptr = {x:0,y:0,pid:0}, lastT = 0, acc = 0, cand = null;
 const animAmp = {};
 function slotCenterPose(c,sl){ return pieceInfo(c,sl).cb; }
 function startPieceHold(c,from,p0,origin){
- hold = {kind:'piece', id:c.id, origin, p:p0.slice(), v:[0,0,0], ax:0, az:0, tv:[0,0], yaw:0, sq:1, sqv:-2.5, depth:dot(vsub(p0,eye),fwd), tgt:p0.slice()};
- st.sel = c.id; st.slot = null; st.hover = null; document.body.style.cursor = 'grabbing'; snd('pick'); refreshGhosts(); go();
+ hold = {kind:'piece', lift:0, pid:ptr.pid, id:c.id, origin, p:p0.slice(), v:[0,0,0], ax:0, az:0, tv:[0,0], yaw:0, sq:1, sqv:-2.5, depth:dot(vsub(p0,eye),fwd), tgt:p0.slice()};
+ st.sel = c.id; st.slot = null; st.hover = null; document.body.style.cursor = 'grabbing'; snd('pick'); refreshGhosts(); go(); hint();
 }
 function startGrab(cd,e){
  if (cd.kind==='slot'){ const id = S.installed[cd.id]; if (!id) return; const c = B.byId(id), sl = slotGeom().find(q => q.id===cd.id);
@@ -679,19 +692,21 @@ function startGrab(cd,e){
   persist(); startPieceHold(c,null,cb,{t:'slot',slot:cd.id}); ui(); }
  else if (cd.kind==='loose'){ const i = loose.indexOf(cd.b); if (i<0) return; const b = loose.splice(i,1)[0], c = B.byId(b.id); startPieceHold(c,null,b.p,{t:'desk',p:b.p.slice()}); hold.v = b.v.slice(); hold.yaw = b.yaw; hold.ax = b.ax; }
  else if (cd.kind==='plug'){ const r = ropes[cd.id]; if (!r) return; if (S.connections[cd.id]){ B.disconnect(S,cd.id); persist(); snd('plug'); toast('Cable desconectado.'); }
-  const end = r.p[ROPE_N-1]; hold = {kind:'plug', id:cd.id, depth:dot(vsub(end,eye),fwd), end:end.slice()}; r.held = end.slice(); r.ins = null; st.cable = cd.id; st.view = st.view; st.hoverT = null;
-  document.body.style.cursor = 'grabbing'; snd('pick'); refreshGhosts(); ui(); go(); }
+  const end = r.p[ROPE_N-1]; hold = {kind:'plug', lift:0, pid:ptr.pid, id:cd.id, depth:dot(vsub(end,eye),fwd), end:end.slice()}; r.held = end.slice(); r.ins = null; st.cable = cd.id; st.view = st.view; st.hoverT = null;
+  document.body.style.cursor = 'grabbing'; snd('pick'); refreshGhosts(); ui(); go(); hint(); }
 }
 function startTrayHold(id){ const c = B.byId(id); if (!c) return; const d = ptPlane(ptr.x,ptr.y,dot(vsub(TG,eye),fwd)); startPieceHold(c,null,d,{t:'tray'}); }
-function nearTarget(end){ let best = null, bd = 6; tghosts.forEach(q => { const tb = targetBox(q.id); if (!tb) return; const d = vlen(vsub(end,plugPoint(tb))); if (d<bd){ bd = d; best = q.id; } }); return best; }
+function nearTarget(end){ let best = null, bd = 7.5; tghosts.forEach(q => { const tb = targetBox(q.id); if (!tb) return; const d = vlen(vsub(end,plugPoint(tb))); if (d<bd){ bd = d; best = q.id; } }); return best; }
 function physStep(dt,t){
  let moving = false;
- if (hold && hold.kind==='piece'){ const c = B.byId(hold.id); let tgt = ptPlane(ptr.x,ptr.y,hold.depth), aligned = false;
+ if (hold && hold.kind==='piece'){ const c = B.byId(hold.id); const hs0 = pieceInfo(c,canonSlot(c)).hs; let tgt, aligned = false; const sp = surfacePoint();
+  if (sp){ const ax = sp.n[0] ? 0 : sp.n[1] ? 1 : 2; tgt = vadd(sp.p,vsc(sp.n,hs0[ax]+.8)); } else tgt = ptPlane(ptr.x,ptr.y,hold.depth);
+  tgt[1] += hold.lift; tgt[0] = clamp(tgt[0],-34,78); tgt[2] = clamp(tgt[2],-32,52);
   const gs = st.hover && ghosts.find(q => q.id===st.hover);
   if (gs && gs.k!=='bad'){ const sl = slotGeom(c).find(q => q.id===st.hover); if (sl){ tgt = vadd(slotCenterPose(c,sl),[0,0,3]); aligned = true; } }
   const hs = hsRest(c,pieceInfo(c,canonSlot(c))); tgt[1] = Math.max(tgt[1],GROUND+hs[1]+.5); hold.tgt = tgt; springBody(hold,tgt,dt,aligned); moving = true; }
- if (hold && hold.kind==='plug'){ const r = ropes[hold.id]; if (r){ let tgt = ptPlane(ptr.x,ptr.y,hold.depth); const nt = nearTarget(tgt); st.hoverT = nt; if (nt){ const tb = targetBox(nt); tgt = vadd(plugPoint(tb),[0,0,2.2]); }
-  tgt[1] = Math.max(tgt[1],GROUND+1); r.held = r.held ? vadd(r.held,vsc(vsub(tgt,r.held),.55)) : tgt; } moving = true; }
+ if (hold && hold.kind==='plug'){ const r = ropes[hold.id]; if (r){ const sp = surfacePoint(); let tgt = sp ? vadd(sp.p,vsc(sp.n,1.5)) : ptPlane(ptr.x,ptr.y,hold.depth); tgt[1] += hold.lift; const nt = nearTarget(tgt); st.hoverT = nt; if (nt){ const tb = targetBox(nt); tgt = vadd(plugPoint(tb),[0,0,2.2]); }
+  tgt[1] = Math.max(tgt[1],GROUND+1); r.held = r.held ? vadd(r.held,vsc(vsub(tgt,r.held),.4)) : tgt; } moving = true; }
  for (let i=loose.length-1;i>=0;i--){ looseStep(loose[i],dt); if (loose[i].dead) loose.splice(i,1); else moving = true; }
  if (S.installed.psu && ex<.3){ ropeEnsure(); acc += dt; let n = 0; while (acc>=1/60 && n<3){ Object.keys(ropes).forEach(k => ropeStep(ropes[k],t)); acc -= 1/60; n++; } if (acc>.05) acc = 0; moving = true; }
  return moving;
@@ -876,7 +891,7 @@ function tap(x,y){
  if (st.sel){ const s = pickAt(x,y,true); if (s) doInstall(s,st.sel); else toast('Toca una de las zonas resaltadas para colocar la pieza.'); return; }
  st.slot = pickAt(x,y,false); ui(); go();
 }
-const ptrs = new Map(); let moved = 0, pinch = 0; const pd = () => { const a = [...ptrs.values()]; return Math.hypot(a[0][0]-a[1][0],a[0][1]-a[1][1]); };
+let liftPtr = null, liftY = 0; const ptrs = new Map(); let moved = 0, pinch = 0; const pd = () => { const a = [...ptrs.values()]; return Math.hypot(a[0][0]-a[1][0],a[0][1]-a[1][1]); };
 function grabAt(x,y){
  const d = ray(x,y); let best = null, bt = 1e9;
  cablePickS.forEach(q => { const k = raySphere(d,q.c,q.r); if (k!=null && k<bt){ bt = k; best = {kind:'plug',id:q.id}; } });
@@ -884,9 +899,11 @@ function grabAt(x,y){
  picks.forEach(p => { if (p.id==='case') return; p.boxes.forEach(b => { const k = hitBox(d,b,p.off); if (k!=null && k<bt){ bt = k; best = {kind:'slot',id:p.id}; } }); });
  return best;
 }
-cv.addEventListener('pointerdown', e => { cv.setPointerCapture(e.pointerId); ptrs.set(e.pointerId,[e.clientX,e.clientY]); ptr = {x:e.clientX,y:e.clientY}; moved = 0; cam.drag = true; cam.vth = 0; if (ptrs.size===2){ pinch = pd(); cand = null; } else cand = hold ? null : grabAt(e.clientX,e.clientY); });
+cv.addEventListener('pointerdown', e => { cv.setPointerCapture(e.pointerId); ptrs.set(e.pointerId,[e.clientX,e.clientY]); ptr = {x:e.clientX,y:e.clientY,pid:e.pointerId}; moved = 0; cam.drag = true; if (hold && e.pointerId!==hold.pid){ liftPtr = e.pointerId; liftY = e.clientY; } cam.vth = 0; if (ptrs.size===2){ pinch = pd(); cand = null; } else cand = hold ? null : grabAt(e.clientX,e.clientY); });
 cv.addEventListener('pointermove', e => {
- ptr = {x:e.clientX,y:e.clientY}; if (hold) return;
+ if (hold && e.pointerId===liftPtr){ hold.lift = clamp(hold.lift-(e.clientY-liftY)*.12,-3,30); liftY = e.clientY; go(); return; }
+ if (hold && e.pointerId!==hold.pid) return;
+ ptr = {x:e.clientX,y:e.clientY,pid:e.pointerId}; if (hold) return;
  const p = ptrs.get(e.pointerId);
  if (!p){ cv.style.cursor = grabAt(e.clientX,e.clientY) ? 'grab' : 'default'; const tip = $('tip');
   if (st.cable){ const s = pickTarget(e.clientX,e.clientY); if (s!==st.hoverT){ st.hoverT = s; go(); } const q = tghosts.find(g2 => g2.id===s); tip.textContent = q ? q.msg : ''; tip.style.display = q ? 'block' : 'none'; tip.style.left = e.clientX+14+'px'; tip.style.top = e.clientY+14+'px'; }
@@ -897,9 +914,9 @@ cv.addEventListener('pointermove', e => {
  if (ptrs.size===1){ cam.th -= dx*.007; cam.vth = -dx*.007; cam.ph = Math.max(.05,Math.min(1.3,cam.ph+dy*.005)); } else { const d = pd(); cam.d = Math.max(55,Math.min(220,cam.d*pinch/d)); pinch = d; }
  go();
 });
-const up = e => { if (hold){ ptrs.delete(e.pointerId); if (!ptrs.size) cam.drag = false; return; } if (ptrs.size===1 && moved<6 && e.type==='pointerup') tap(e.clientX,e.clientY); ptrs.delete(e.pointerId); if (!ptrs.size) cam.drag = false; cand = null; go(); };
+const up = e => { if (e.pointerId===liftPtr) liftPtr = null; if (hold){ ptrs.delete(e.pointerId); if (!ptrs.size) cam.drag = false; return; } if (ptrs.size===1 && moved<6 && e.type==='pointerup') tap(e.clientX,e.clientY); ptrs.delete(e.pointerId); if (!ptrs.size) cam.drag = false; cand = null; go(); };
 cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
-cv.addEventListener('wheel', e => { e.preventDefault(); cam.d = Math.max(55,Math.min(220,cam.d*(e.deltaY<0?.92:1.08))); go(); }, {passive:false});
+cv.addEventListener('wheel', e => { e.preventDefault(); if (hold){ hold.lift = clamp(hold.lift-e.deltaY*.03,-3,30); go(); return; } cam.d = Math.max(55,Math.min(220,cam.d*(e.deltaY<0?.92:1.08))); go(); }, {passive:false});
 
 /* ---------- interfaz ---------- */
 const GUIDE = {
@@ -924,6 +941,7 @@ const CABN = {atx24:'Placa · 24 pines',cpu8:'CPU · 8 pines',pcie8:'Gráfica ·
 const stepKey = id => id.startsWith('conn:') ? id.match(/\.(\w+)#/)[1] : id;
 const css = c => 'rgb('+c.map(v => Math.round(Math.min(1,v*1.5)*255)).join(',')+')';
 const tLabel = tg => tg.type==='sata' ? 'Unidad SATA ('+tg.on+')' : CABN[tg.type]+(tg.type==='pcie8'?' #'+tg.id.match(/#(\d+)/)[1]:'');
+function stepText(nx){ if (!nx.id.startsWith('conn:')) return nx.txt; const tg = B.targets(S).find(x => 'conn:'+x.id===nx.id); return tg ? 'Conecta el cable «'+CABN[tg.type]+'»'+(tg.type==='pcie8'?' (#'+tg.id.match(/#(\d+)/)[1]+')':'')+' a su conector.' : nx.txt; }
 function sync(){
  const nx = nextStep(), isConn = !!nx && nx.id.startsWith('conn:');
  if (st.mode==='g' && nx){ if (STEPCAT[nx.id]) st.chip = STEPCAT[nx.id]; if (isConn && st.view==='m' && !st.autoc){ st.view = 'c'; st.autoc = true; toast('Ahora los cables: elige uno y toca su conector en el equipo.'); } }
@@ -945,7 +963,7 @@ function ui(){
   $('items').innerHTML = !S.installed.psu ? '<p class="m">Instala una fuente de alimentación para ver sus cables.</p>' : B.cables(S).map(cb => '<button class="cell cab'+(st.cable===cb.id?' sel':'')+'" data-cable="'+cb.id+'"><span class="nm">'+CABN[cb.type]+'</span><span class="sp">'+(S.connections[cb.id]?'Conectado':'Libre')+'</span><span class="tg"><i class="sw" style="background:'+css(TC[cb.type])+'"></i></span></button>').join('');
  }
  const p = B.progress(S), g2 = B.globalStatus(S), bad = g2.rules.filter(r => r.status!=='ok'), tl = B.targets(S), done = Object.values(S.connections);
- $('bar').style.width = p.percent+'%'; $('pct').textContent = p.percent+' %'; $('stt').textContent = 'Montaje '+p.percent+' %'; $('next').textContent = nx ? nx.txt : 'Todo montado. Revisa el resumen antes del primer encendido.';
+ $('bar').style.width = p.percent+'%'; $('pct').textContent = p.percent+' %'; $('stt').textContent = 'Montaje '+p.percent+' %'; $('next').textContent = nx ? stepText(nx) : 'Todo montado. Revisa el resumen antes del primer encendido.';
  $('compat').innerHTML = '<div class="state '+g2.status+'"><i></i>'+STAT[g2.status]+'</div><small>Solo con las piezas instaladas.</small>'+(g2.reason?'<p class="m">'+esc(g2.reason)+'</p>':'')+bad.map(r => '<p class="r '+r.status+'">'+esc(r.reason)+'</p>').join('');
  $('conns').innerHTML = tl.length ? tl.map(x => '<p class="cn'+(done.includes(x.id)?' ok':'')+'">'+(done.includes(x.id)?'●':'○')+' '+esc(tLabel(x))+'</p>').join('') : '<p class="m">Sin conectores todavía.</p>';
  const sl = st.slot && S.installed[st.slot] ? B.byId(S.installed[st.slot]) : null, cb = st.cable && S.connections[st.cable];
@@ -1007,7 +1025,8 @@ function slotNear(x,y){
 }
 $('items').addEventListener('pointerdown', e => { const c = e.target.closest('.cell'); if (c && c.dataset.id) pend = {id:c.dataset.id, x:e.clientX, y:e.clientY}; });
 document.addEventListener('pointermove', e => {
- ptr = {x:e.clientX,y:e.clientY};
+ if (hold && e.pointerId!==hold.pid) return;
+ if (!hold || e.pointerId===hold.pid) ptr = {x:e.clientX,y:e.clientY,pid:e.pointerId};
  if (pend && !hold){ const dx = e.clientX-pend.x, dy = e.clientY-pend.y;
   if (Math.hypot(dx,dy)>8 && (e.pointerType!=='touch' || Math.abs(dy)>Math.abs(dx))){ const id = pend.id; pend = null; startTrayHold(id); document.querySelectorAll('.cell').forEach(c => c.classList.toggle('sel', c.dataset.id===id)); } }
  if (hold){ const tip = $('tip'); let q = null;
@@ -1037,7 +1056,8 @@ function endHold(e,drop){
  if (!hold){ pend = null; return; } const h = hold; hold = null; document.body.style.cursor = ''; supp = true; setTimeout(() => supp = false, 80); $('tip').style.display = 'none';
  if (h.kind==='plug') releasePlug(h,drop); else releasePiece(h,e,drop); pend = null;
 }
-document.addEventListener('pointerup', e => endHold(e,true)); document.addEventListener('pointercancel', e => endHold(e,false));
+document.addEventListener('pointerup', e => { if (hold && e.pointerId!==hold.pid) return; endHold(e,true); }); document.addEventListener('pointercancel', e => { if (hold && e.pointerId!==hold.pid) return; endHold(e,false); });
+addEventListener('keydown', e => { if (!hold) return; if (e.key==='q'||e.key==='Q'){ hold.lift = clamp(hold.lift-1,-3,30); go(); } if (e.key==='e'||e.key==='E'){ hold.lift = clamp(hold.lift+1,-3,30); go(); } });
 function showImport(r){ $('cres').innerHTML = '<p class="m">'+r.added+' nuevas · '+r.updated+' actualizadas</p>'+r.errors.map(x => '<p class="r bad">'+esc(x)+'</p>').join('')+r.warnings.slice(0,30).map(x => '<p class="r cond">'+esc(x)+'</p>').join('')+(r.warnings.length>30?'<p class="m">… y '+(r.warnings.length-30)+' avisos más.</p>':''); }
 $('cfile').addEventListener('change', e => { const f = e.target.files && e.target.files[0]; if (!f) return; if (f.size>2e6){ toast('El archivo supera 2 MB.','bad'); return; } const rd = new FileReader(); rd.onload = () => { $('cio').value = String(rd.result); const r = B.importCatalog(rd.result); showImport(r); toast(r.added||r.updated ? 'Catálogo actualizado: '+r.added+' nuevas, '+r.updated+' actualizadas.' : 'No se importó ninguna pieza.', r.added||r.updated?'ok':'bad'); refreshGhosts(); ui(); go(); }; rd.readAsText(f); e.target.value = ''; });
 $('items').addEventListener('error', e => { if (e.target && e.target.tagName==='IMG') e.target.remove(); }, true);
