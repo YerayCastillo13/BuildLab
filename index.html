@@ -58,7 +58,7 @@ details{margin-top:12px}summary{font:500 10.5px/1 var(--mono);letter-spacing:.12
  .panel{display:none;left:var(--g);right:var(--g);width:auto;top:calc(var(--g) + 54px);max-height:60vh}.panel.open{display:block}}
 </style></head><body>
 <canvas id="cv" aria-label="Laboratorio 3D interactivo de montaje de PC. Arrastra para girar."></canvas>
-<header class="mast"><span class="kicker">Laboratorio de montaje · Nº 01</span><h1><span>Build</span><span>Lab.</span></h1><p class="cap">Monta un ordenador pieza a pieza y entiende por qué cada cosa encaja.</p></header>
+<header class="mast"><span class="kicker">Laboratorio de montaje · Nº 01</span><h1><span>Build</span><span>Lab.</span></h1><p class="cap">Coge cada pieza, suéltala en su sitio y enchufa los cables tú mismo.</p></header>
 <div class="status"><i class="dot"></i><span id="stt">Montaje 0 %</span><button id="pbtn" class="lnk">Estado</button></div>
 <aside class="panel" id="panel">
 <h4>Progreso</h4><div class="big" id="pct">0 %</div><div class="track"><div id="bar"></div></div>
@@ -66,7 +66,7 @@ details{margin-top:12px}summary{font:500 10.5px/1 var(--mono);letter-spacing:.12
 <button id="paste" class="btn" style="display:none">Aplicar pasta térmica</button><small id="pasteok" style="display:none">Pasta aplicada: ya puedes instalar el disipador.</small>
 <h4>Compatibilidad</h4><div id="compat"></div><h4>Conexiones</h4><div id="conns"></div><div id="info"></div>
 <h4>Vista</h4><label class="label" for="exr">Despiece</label><input id="exr" type="range" min="0" max="100" value="0">
-<button id="pnl" class="btn">Cerrar panel lateral</button><button id="rv" class="btn">Restablecer cámara</button><button id="reset" class="btn">Reiniciar montaje</button>
+<button id="snd" class="btn">Sonido: activado</button><button id="pnl" class="btn">Cerrar panel lateral</button><button id="rv" class="btn">Restablecer cámara</button><button id="reset" class="btn">Reiniciar montaje</button>
 <details><summary>Catálogo de piezas</summary><small id="ccount"></small><textarea id="cio" placeholder="Pega aquí tu catálogo (JSON o CSV) o carga un archivo"></textarea>
 <input type="file" id="cfile" accept=".json,.csv,.txt,text/csv,application/json" style="display:none">
 <button id="cimp" class="btn">Importar catálogo</button><button id="cload" class="btn">Cargar archivo…</button><button id="ctj" class="btn">Plantilla JSON</button><button id="ctc" class="btn">Plantilla CSV</button><button id="cexp" class="btn">Exportar importadas</button><button id="cclr" class="btn">Quitar importadas</button>
@@ -565,24 +565,154 @@ function seg(a,b,r,col){
  const d = [b[0]-a[0],b[1]-a[1],b[2]-a[2]], L = Math.hypot(d[0],d[1],d[2])||1e-4, y = [d[0]/L,d[1]/L,d[2]/L], x = nrm(crs(Math.abs(y[1])<.9?[0,1,0]:[1,0,0],y)), z = crs(y,x);
  objs.push({k:1,c:[(a[0]+b[0])/2,(a[1]+b[1])/2,(a[2]+b[2])/2],s:[2*r,L,2*r],R:new Float32Array([x[0],x[1],x[2],y[0],y[1],y[2],z[0],z[1],z[2]]),col,sp:.3,bev:0,mode:PMODE,a:1});
 }
-function bez(p0,p1,p2,p3,u){ const v = 1-u; return [0,1,2].map(i => v*v*v*p0[i]+3*v*v*u*p1[i]+3*v*u*u*p2[i]+u*u*u*p3[i]); }
-function drawCables(t){
- let live = false; cablePicks.length = 0;
- B.cables(S).forEach((c,i) => {
-  const sp = sockE(i), S0 = [sp[0],sp[1],8.7], col = TC[c.type], r = {atx24:.5,cpu8:.32,pcie8:.32,sata:.2}[c.type], pl = PLUG[c.type], tid = S.connections[c.id], sel = st.cable===c.id;
-  const free = [S0[0]+((i%3)-1)*.9, S0[1]+5+(i%4)*.8+(sel?3:0), 14+(i%4)*.8+(sel?2:0)];
-  let E = free, box, conn = false, tb = tid ? targetBox(tid) : null;
-  if (tb){ conn = true; const tgt = [tb[0]+tb[3]/2, tb[2]+tb[5]/2, tb[1]+tb[4]+.15], an = cableAnim[c.id], p = an ? Math.min(1,(t-an)/550) : 1; if (an && p>=1) delete cableAnim[c.id]; else if (an) live = true;
-   const e = 1-Math.pow(1-p,3); E = [0,1,2].map(k => free[k]+(tgt[k]-free[k])*e); box = [tb[0]-.12,tb[1]-.12,tb[2]-.12,tb[3]+.24,tb[4]+.24,tb[5]+.24]; }
-  else box = [E[0]-pl[0]/2,E[2]-pl[1]/2,E[1]-pl[2]/2,pl[0],pl[1],pl[2]];
-  const P1 = [S0[0],S0[1],S0[2]+6+i*.25], P2 = conn ? [E[0],E[1]+.5,E[2]+5+(i%3)*.5] : [E[0],E[1]-2,E[2]-3];
-  let prev = S0; for (let k=1;k<=16;k++){ const q = bez(S0,P1,P2,E,k/16); seg(prev,q,r,col); prev = q; }
-  bx(box[0],box[1],box[2],box[3],box[4],box[5],col.map(v => v*.6),{sp:.3});
-  cablePicks.push({id:c.id, box:[box[0]-.6,box[1]-.6,box[2]-.6,box[3]+1.2,box[4]+1.2,box[5]+1.2]});
-  if (sel){ bx(box[0]-.3,box[1]-.3,box[2]-.3,box[3]+.6,box[4]+.6,box[5]+.6,[.3,.75,1],{mode:2,a:.25}); live = true; }
+/* ---------- física tipo juego: piezas con muelle, cables con cuerda (Verlet) ---------- */
+const GROUND = -2.6, ROPE_N = 20, ROPE_L = {atx24:45,cpu8:62,pcie8:50,sata:48}, RR = {atx24:.5,cpu8:.32,pcie8:.32,sata:.2};
+const clamp = (v,a,b) => Math.max(a,Math.min(b,v));
+const vadd = (a,b) => [a[0]+b[0],a[1]+b[1],a[2]+b[2]], vsub = (a,b) => [a[0]-b[0],a[1]-b[1],a[2]-b[2]], vsc = (a,k) => [a[0]*k,a[1]*k,a[2]*k], vlen = a => Math.hypot(a[0],a[1],a[2]);
+const m3 = (A,Bm) => { const o = new Float32Array(9); for (let c=0;c<3;c++) for (let r=0;r<3;r++){ let s = 0; for (let k=0;k<3;k++) s += A[k*3+r]*Bm[c*3+k]; o[c*3+r] = s; } return o; };
+const m3v = (R,v) => [R[0]*v[0]+R[3]*v[1]+R[6]*v[2], R[1]*v[0]+R[4]*v[1]+R[7]*v[2], R[2]*v[0]+R[5]*v[1]+R[8]*v[2]];
+const rotY = a => { const c = Math.cos(a), s = Math.sin(a); return new Float32Array([c,0,-s,0,1,0,s,0,c]); };
+const rotX = a => { const c = Math.cos(a), s = Math.sin(a); return new Float32Array([1,0,0,0,c,s,0,-s,c]); };
+const rotZ = a => { const c = Math.cos(a), s = Math.sin(a); return new Float32Array([c,s,0,-s,c,0,0,0,1]); };
+const poseR = (yaw,ax,az) => m3(rotY(yaw), m3(rotX(ax), rotZ(az)));
+function rayBox(d,mn,mx){ let t0 = 0, t1 = 1e9; for (let i=0;i<3;i++){ if (Math.abs(d[i])<1e-6){ if (eye[i]<mn[i]||eye[i]>mx[i]) return null; continue; }
+  let a = (mn[i]-eye[i])/d[i], c = (mx[i]-eye[i])/d[i]; if (a>c){ const x = a; a = c; c = x; } t0 = Math.max(t0,a); t1 = Math.min(t1,c); if (t0>t1) return null; } return t0; }
+function raySphere(d,c,r){ const oc = vsub(eye,c), b = dot(oc,d), cc = dot(oc,oc)-r*r, disc = b*b-cc; if (disc<0) return null; const t = -b-Math.sqrt(disc); return t>0 ? t : (-b+Math.sqrt(disc)>0 ? 0 : null); }
+
+// ---- modelo de una pieza suelta: se dibuja con las mismas funciones que las instaladas y se transforma
+const infoCache = {};
+const canonSlot = c => { const k = {case:'case',psu:'psu',mobo:'mobo',cpu:'cpu',cooler:'cooler',gpu:'gpu',ram:'ram1',storage:c.iface==='nvme'?'m2_1':'bay1'}[c.cat]; return slotGeom(c).find(q => q.id===k); };
+function drawPiece(c,sl){ const g = sl.cat==='gpu' && c.length ? Object.assign({},sl,{w:c.length/10}) : sl; PIECE[c.cat](g,c); }
+function bboxOf(from){ const mn = [1e9,1e9,1e9], mx = [-1e9,-1e9,-1e9];
+ for (let i=from;i<objs.length;i++){ const o = objs[i]; if (o.mode) continue; for (let a=0;a<3;a++){ const h = (Math.abs(o.R[a])*o.s[0]+Math.abs(o.R[3+a])*o.s[1]+Math.abs(o.R[6+a])*o.s[2])/2; mn[a] = Math.min(mn[a],o.c[a]-h); mx[a] = Math.max(mx[a],o.c[a]+h); } }
+ return {cb:[(mn[0]+mx[0])/2,(mn[1]+mx[1])/2,(mn[2]+mx[2])/2], hs:[(mx[0]-mn[0])/2,(mx[1]-mn[1])/2,(mx[2]-mn[2])/2]}; }
+function pieceInfo(c,sl){
+ const key = c.id+'|'+sl.id+'|'+[sl.x,sl.y,sl.z,sl.w,sl.h,sl.d].join(',')+'|'+(c.length||'')+'|'+c.name; if (infoCache[key]) return infoCache[key];
+ const kObjs = objs, kOff = OFF, kPm = PMODE, kFan = hasFan; objs = []; OFF = 0; PMODE = 0; drawPiece(c,sl); const bb = bboxOf(0); objs = kObjs; OFF = kOff; PMODE = kPm; hasFan = kFan;
+ return infoCache[key] = bb; }
+function drawPose(c,sl,p,yaw,ax,az,k){
+ const info = pieceInfo(c,sl), from = objs.length, kOff = OFF, kPm = PMODE; OFF = 0; PMODE = 0; drawPiece(c,sl); OFF = kOff; PMODE = kPm;
+ const Rg = poseR(yaw,ax,az);
+ for (let i=from;i<objs.length;i++){ const o = objs[i], r = m3v(Rg,vsc(vsub(o.c,info.cb),k)); o.c = vadd(p,r); o.R = m3(Rg,o.R); o.s = [o.s[0]*k,o.s[1]*k,o.s[2]*k]; }
+}
+const FLAT = {mobo:1,cpu:1,ram:1}; const isFlat = c => FLAT[c.cat] || (c.cat==='storage' && c.iface==='nvme');
+const hsRest = (c,info) => isFlat(c) ? [info.hs[0],info.hs[2],info.hs[1]] : info.hs;
+const inCase = p => p[0]>-3 && p[0]<47 && p[2]>-3 && p[2]<23;
+
+// ---- muelle de la pieza en la mano (con inclinación y aplastamiento tipo gelatina)
+function springBody(h,tgt,dt,aligned){
+ const k = 230, cdamp = 2*Math.sqrt(k)*.72;
+ for (let i=0;i<3;i++){ const a = k*(tgt[i]-h.p[i])-cdamp*h.v[i]; h.v[i] = clamp(h.v[i]+a*dt,-500,500); h.p[i] += h.v[i]*dt; }
+ const tax = aligned ? 0 : clamp(h.v[2]*.006,-.55,.55), taz = aligned ? 0 : clamp(-h.v[0]*.006,-.55,.55);
+ h.tv[0] += (170*(tax-h.ax)-15*h.tv[0])*dt; h.ax += h.tv[0]*dt; h.tv[1] += (170*(taz-h.az)-15*h.tv[1])*dt; h.az += h.tv[1]*dt;
+ h.sqv += (200*(1-h.sq)-11*h.sqv)*dt; h.sq += h.sqv*dt;
+}
+const ptPlane = (px,py,depth) => { const d = ray(px,py), t = depth/Math.max(.2,dot(d,fwd)); return vadd(eye,vsc(d,t)); };
+
+// ---- piezas sueltas sobre la mesa
+const loose = [];
+function looseStep(b,dt){
+ const c = B.byId(b.id); if (!c){ b.dead = true; return; } const info = pieceInfo(c,canonSlot(c)), hs = hsRest(c,info), floor = GROUND+hs[1];
+ b.v[1] -= 700*dt; for (let i=0;i<3;i++) b.p[i] += b.v[i]*dt;
+ if (b.p[1] <= floor){ b.p[1] = floor; if (b.v[1] < -60){ b.sqv -= Math.min(5,-b.v[1]*.012); if (b.v[1] < -140) snd('thud'); } b.v[1] = -b.v[1]*.3; if (Math.abs(b.v[1])<35) b.v[1] = 0;
+  const f = Math.exp(-7*dt); b.v[0] *= f; b.v[2] *= f; b.yv *= Math.exp(-4*dt); }
+ b.yaw += b.yv*dt; b.p[0] = clamp(b.p[0],-32,76); b.p[2] = clamp(b.p[2],-30,50);
+ if (b.p[1]-hs[1] < 46 && b.p[0]>-hs[0] && b.p[0]<44+hs[0] && b.p[2]>-hs[2] && b.p[2]<20+hs[2]){   // no atraviesa la caja: sale por el lado más cercano
+  const o = [b.p[0]+hs[0], 44+hs[0]-b.p[0], b.p[2]+hs[2], 20+hs[2]-b.p[2]], m = Math.min(o[0],o[1],o[2],o[3]);
+  if (m===o[0]){ b.p[0] = -hs[0]; b.v[0] = Math.min(0,b.v[0]); } else if (m===o[1]){ b.p[0] = 44+hs[0]; b.v[0] = Math.max(0,b.v[0]); } else if (m===o[2]){ b.p[2] = -hs[2]; b.v[2] = Math.min(0,b.v[2]); } else { b.p[2] = 20+hs[2]; b.v[2] = Math.max(0,b.v[2]); } }
+ const flat = isFlat(c) ? -Math.PI/2 : 0; b.tv[0] += (150*(flat-b.ax)-13*b.tv[0])*dt; b.ax += b.tv[0]*dt; b.tv[1] += (150*(0-b.az)-13*b.tv[1])*dt; b.az += b.tv[1]*dt;
+ b.sqv += (200*(1-b.sq)-11*b.sqv)*dt; b.sq += b.sqv*dt;
+}
+
+// ---- cables: cuerda de partículas con restricciones de distancia
+const ropes = {}, cablePickS = [];
+const sockPos = i => { const s = sockE(i); return [s[0],s[1],8.8]; };
+const plugPoint = tb => [tb[0]+tb[3]/2, tb[2]+tb[5]/2, tb[1]+tb[4]+.15];
+function ropeInit(c,i){
+ const S0 = sockPos(i), tid = S.connections[c.id], tb = tid && targetBox(tid), E = tb ? plugPoint(tb) : [S0[0],S0[1]-2,S0[2]+ROPE_L[c.type]*.4], p = [], q = [];
+ for (let k=0;k<ROPE_N;k++){ const u = k/(ROPE_N-1), pt = [S0[0]+(E[0]-S0[0])*u, S0[1]+(E[1]-S0[1])*u-Math.sin(u*Math.PI)*4, S0[2]+(E[2]-S0[2])*u]; p.push(pt); q.push(pt.slice()); }
+ return {p,q,id:c.id,i,type:c.type,L:ROPE_L[c.type],ins:null,held:null};
+}
+function ropeEnsure(){ const cl = B.cables(S), ids = {}; cl.forEach(c => ids[c.id] = 1); Object.keys(ropes).forEach(k => { if (!ids[k]) delete ropes[k]; }); cl.forEach((c,i) => { if (!ropes[c.id]) ropes[c.id] = ropeInit(c,i); }); }
+function pushOut(pt,bx_,r){
+ const mn = bx_.mn, mx = bx_.mx; if (pt[0]<mn[0]-r||pt[0]>mx[0]+r||pt[1]<mn[1]-r||pt[1]>mx[1]+r||pt[2]<mn[2]-r||pt[2]>mx[2]+r) return;
+ const o = [pt[0]-(mn[0]-r), mx[0]+r-pt[0], pt[1]-(mn[1]-r), mx[1]+r-pt[1], pt[2]-(mn[2]-r), mx[2]+r-pt[2]]; let k = 0; for (let i=1;i<6;i++) if (o[i]<o[k]) k = i;
+ const ax = k>>1, sgn = (k&1) ? 1 : -1; pt[ax] = (k&1) ? mx[ax]+r : mn[ax]-r; }
+let RBOX = [];
+function ropeStep(r,t){
+ const N = ROPE_N, p = r.p, q = r.q, seg = r.L/(N-1), rad = RR[r.type], S0 = sockPos(r.i), tid = S.connections[r.id];
+ let E = null, tb = tid && targetBox(tid); if (tb) E = plugPoint(tb);
+ if (E && r.ins){ const u = Math.min(1,(t-r.ins.t0)/260), e = 1-Math.pow(1-u,3); E = [0,1,2].map(k => r.ins.from[k]+(E[k]-r.ins.from[k])*e); if (u>=1) r.ins = null; }
+ let H = null; if (r.held){ H = r.held.slice(); const d = vsub(H,S0), L = vlen(d); if (L>r.L*.97) H = vadd(S0,vsc(d,r.L*.97/L)); }
+ const dt = 1/60;
+ for (let k=1;k<N;k++) for (let a=0;a<3;a++){ const v = (p[k][a]-q[k][a])*.985; q[k][a] = p[k][a]; p[k][a] += v; if (a===1) p[k][a] -= 700*dt*dt; }
+ for (let it=0;it<12;it++){
+  p[0] = S0.slice(); p[1] = [S0[0],S0[1],S0[2]+seg];
+  if (E){ p[N-1] = E.slice(); p[N-2] = [E[0],E[1],E[2]+seg]; } else if (H) p[N-1] = H.slice();
+  const pin = k => k<2 || (E && k>=N-2) || (!E && H && k===N-1);
+  for (let k=0;k<N-1;k++){ const a = p[k], b = p[k+1], d = vsub(b,a), L = vlen(d)||1e-6, df = (L-seg)/L, wa = pin(k)?0:1, wb = pin(k+1)?0:1, w = wa+wb; if (!w) continue;
+   for (let c=0;c<3;c++){ a[c] += d[c]*df*wa/w; b[c] -= d[c]*df*wb/w; } }
+  for (let k=0;k<N-2;k++){ const a = p[k], b = p[k+2], d = vsub(b,a), L = vlen(d)||1e-6, rest = seg*1.95; if (L<rest){ const df = (rest-L)/L*.06, wa = pin(k)?0:1, wb = pin(k+2)?0:1; for (let c=0;c<3;c++){ a[c] -= d[c]*df*wa; b[c] += d[c]*df*wb; } } }
+ }
+ for (let k=2;k<N;k++){ if (E && k>=N-4) continue; const pt = p[k]; for (const b of RBOX){ if (b.id==='psu' && k<4) continue; pushOut(pt,b,rad); } if (pt[1]<GROUND+rad) pt[1] = GROUND+rad; }
+}
+
+// ---- sonidos sintetizados (sin archivos)
+let AC = null, muted = false; try { muted = localStorage.getItem('buildlab.mute')==='1'; } catch(_){}
+function snd(k){ if (muted) return; try { AC = AC || new (window.AudioContext||window.webkitAudioContext)(); if (AC.state==='suspended') AC.resume();
+ const t = AC.currentTime, o = AC.createOscillator(), g = AC.createGain(), P = {pick:[520,780,.05,.07],click:[260,90,.12,.09],plug:[190,70,.14,.08],thud:[120,45,.2,.18],bad:[170,110,.1,.18]}[k];
+ o.type = k==='bad' ? 'square' : 'triangle'; o.frequency.setValueAtTime(P[0],t); o.frequency.exponentialRampToValueAtTime(Math.max(30,P[1]),t+P[3]); g.gain.setValueAtTime(P[2]*.5,t); g.gain.exponentialRampToValueAtTime(.0001,t+P[3]+.04);
+ o.connect(g); g.connect(AC.destination); o.start(t); o.stop(t+P[3]+.06); } catch(_){} }
+
+// ---- agarrar, mover, soltar
+let hold = null, ptr = {x:0,y:0}, lastT = 0, acc = 0, cand = null;
+const animAmp = {};
+function slotCenterPose(c,sl){ return pieceInfo(c,sl).cb; }
+function startPieceHold(c,from,p0,origin){
+ hold = {kind:'piece', id:c.id, origin, p:p0.slice(), v:[0,0,0], ax:0, az:0, tv:[0,0], yaw:0, sq:1, sqv:-2.5, depth:dot(vsub(p0,eye),fwd), tgt:p0.slice()};
+ st.sel = c.id; st.slot = null; st.hover = null; document.body.style.cursor = 'grabbing'; snd('pick'); refreshGhosts(); go();
+}
+function startGrab(cd,e){
+ if (cd.kind==='slot'){ const id = S.installed[cd.id]; if (!id) return; const c = B.byId(id), sl = slotGeom().find(q => q.id===cd.id);
+  if (cd.id==='case'){ toast('La caja es la base del montaje. Usa «Reiniciar» para empezar de nuevo.'); return; }
+  const cb = pieceInfo(c,sl).cb.slice(), r = B.remove(S,cd.id); if (!r.ok){ toast(r.msg,'bad'); snd('bad'); return; }
+  persist(); startPieceHold(c,null,cb,{t:'slot',slot:cd.id}); ui(); }
+ else if (cd.kind==='loose'){ const i = loose.indexOf(cd.b); if (i<0) return; const b = loose.splice(i,1)[0], c = B.byId(b.id); startPieceHold(c,null,b.p,{t:'desk',p:b.p.slice()}); hold.v = b.v.slice(); hold.yaw = b.yaw; hold.ax = b.ax; }
+ else if (cd.kind==='plug'){ const r = ropes[cd.id]; if (!r) return; if (S.connections[cd.id]){ B.disconnect(S,cd.id); persist(); snd('plug'); toast('Cable desconectado.'); }
+  const end = r.p[ROPE_N-1]; hold = {kind:'plug', id:cd.id, depth:dot(vsub(end,eye),fwd), end:end.slice()}; r.held = end.slice(); r.ins = null; st.cable = cd.id; st.view = st.view; st.hoverT = null;
+  document.body.style.cursor = 'grabbing'; snd('pick'); refreshGhosts(); ui(); go(); }
+}
+function startTrayHold(id){ const c = B.byId(id); if (!c) return; const d = ptPlane(ptr.x,ptr.y,dot(vsub(TG,eye),fwd)); startPieceHold(c,null,d,{t:'tray'}); }
+function nearTarget(end){ let best = null, bd = 6; tghosts.forEach(q => { const tb = targetBox(q.id); if (!tb) return; const d = vlen(vsub(end,plugPoint(tb))); if (d<bd){ bd = d; best = q.id; } }); return best; }
+function physStep(dt,t){
+ let moving = false;
+ if (hold && hold.kind==='piece'){ const c = B.byId(hold.id); let tgt = ptPlane(ptr.x,ptr.y,hold.depth), aligned = false;
+  const gs = st.hover && ghosts.find(q => q.id===st.hover);
+  if (gs && gs.k!=='bad'){ const sl = slotGeom(c).find(q => q.id===st.hover); if (sl){ tgt = vadd(slotCenterPose(c,sl),[0,0,3]); aligned = true; } }
+  const hs = hsRest(c,pieceInfo(c,canonSlot(c))); tgt[1] = Math.max(tgt[1],GROUND+hs[1]+.5); hold.tgt = tgt; springBody(hold,tgt,dt,aligned); moving = true; }
+ if (hold && hold.kind==='plug'){ const r = ropes[hold.id]; if (r){ let tgt = ptPlane(ptr.x,ptr.y,hold.depth); const nt = nearTarget(tgt); st.hoverT = nt; if (nt){ const tb = targetBox(nt); tgt = vadd(plugPoint(tb),[0,0,2.2]); }
+  tgt[1] = Math.max(tgt[1],GROUND+1); r.held = r.held ? vadd(r.held,vsc(vsub(tgt,r.held),.55)) : tgt; } moving = true; }
+ for (let i=loose.length-1;i>=0;i--){ looseStep(loose[i],dt); if (loose[i].dead) loose.splice(i,1); else moving = true; }
+ if (S.installed.psu && ex<.3){ ropeEnsure(); acc += dt; let n = 0; while (acc>=1/60 && n<3){ Object.keys(ropes).forEach(k => ropeStep(ropes[k],t)); acc -= 1/60; n++; } if (acc>.05) acc = 0; moving = true; }
+ return moving;
+}
+function drawHeld(){
+ if (hold && hold.kind==='piece'){ const c = B.byId(hold.id); if (c) drawPose(c,canonSlot(c),hold.p,hold.yaw,hold.ax,hold.az,clamp(hold.sq,.8,1.25)); }
+ for (const b of loose){ const c = B.byId(b.id); if (c) drawPose(c,canonSlot(c),b.p,b.yaw,b.ax,b.az,clamp(b.sq,.8,1.25)); }
+}
+function drawRope(t){
+ cablePickS.length = 0; const live = true;
+ B.cables(S).forEach(c => { const r = ropes[c.id]; if (!r) return; const col = TC[c.type], rad = RR[c.type], pl = PLUG[c.type], N = ROPE_N, tid = S.connections[c.id], tb = tid && targetBox(tid);
+  for (let k=0;k<N-1;k++) seg(r.p[k],r.p[k+1],rad,col);
+  const e = r.p[N-1], tg = nrm(vsub(e,r.p[N-2])), xx = nrm(crs(Math.abs(tg[1])<.9?[0,1,0]:[1,0,0],tg)), yy = crs(tg,xx);
+  if (tb && !r.held){ bx(tb[0]-.12,tb[1]-.12,tb[2]-.12,tb[3]+.24,tb[4]+.24,tb[5]+.24,col.map(v => v*.6),{sp:.3}); }
+  else objs.push({k:0,c:vadd(e,vsc(tg,pl[1]/2)),s:[pl[0],pl[2],pl[1]],R:new Float32Array([xx[0],xx[1],xx[2],yy[0],yy[1],yy[2],tg[0],tg[1],tg[2]]),col:col.map(v => v*.6),sp:.3,bev:1,mode:PMODE,a:1});
+  cablePickS.push({id:c.id,c:e.slice(),r:3});
+  if (st.cable===c.id) objs.push({k:0,c:e.slice(),s:[5,5,5],R:I3,col:[.3,.75,1],sp:0,bev:1,mode:2,a:.2});
  });
  return live;
 }
+
 const nextStep = () => B.steps(S).find(x => !x.done && !st.skip[x.id]);
 
 /* ---------- construcción de la escena ---------- */
@@ -646,18 +776,20 @@ function build(t){
  const dc = st.sel ? B.byId(st.sel) : null, geo = slotGeom(dc);
  for (const sl of geo){
   const id = S.installed[sl.id]; if (!id) continue; const c = B.byId(id); let a = 0, an = anims[sl.id];
-  if (an){ const p = Math.min(1,(t-an)/450); if (p>=1) delete anims[sl.id]; else a = Math.pow(1-p,3)*10; }
+  if (an){ const p = Math.min(1,(t-an)/450); if (p>=1) delete anims[sl.id]; else a = Math.pow(1-p,3)*(animAmp[sl.id]||10); }
   OFF = a+ex*LAYER[c.cat]; const g = sl.cat==='gpu' ? Object.assign({}, sl, {w:c.length/10}) : sl;
   PIECE[c.cat](g,c);
   picks.push({id:sl.id, boxes: sl.id==='case' ? [[0,-1,0,44,1,46],[0,0,-1,44,20,1]] : [[g.x,g.y,g.z,g.w,g.d,g.h]], off:OFF});
  }
  OFF = 0;
- if (drag && st.hover){ const sl = geo.find(x => x.id===st.hover), c = B.byId(drag); if (sl && c){ PMODE = 4; PALPHA = .55; OFF = 6+2*Math.sin(TT/220); PIECE[c.cat](sl,c); PMODE = 0; PALPHA = 1; OFF = 0; } }
+ RBOX = picks.flatMap(p => p.boxes.map(b => ({id:p.id, mn:[b[0],b[2],b[1]+p.off], mx:[b[0]+b[3],b[2]+b[5],b[1]+b[4]+p.off]})));
+ if (false){ const sl = geo.find(x => x.id===st.hover), c = B.byId(drag); if (sl && c){ PMODE = 4; PALPHA = .55; OFF = 6+2*Math.sin(TT/220); PIECE[c.cat](sl,c); PMODE = 0; PALPHA = 1; OFF = 0; } }
+ drawHeld();
  if (glass && S.installed.case) bx(0,19.7,0,44,.3,46,[.7,.82,1],{mode:3,a:.12});
  // zonas candidatas, selección y destellos
  let live = false;
- if (S.installed.psu && ex<.3 && drawCables(t)) live = true;
- if (st.view==='c' && st.cable) tghosts.forEach(q => { const b = targetBox(q.id); if (!b) return; const pl = .75+.25*Math.sin((t-T0)/260), rgb = q.k==='ok'?[.22,.82,.55]:[.95,.36,.36];
+ if (S.installed.psu && ex<.3 && drawRope(t)) live = true;
+ if (st.cable) tghosts.forEach(q => { const b = targetBox(q.id); if (!b) return; const pl = .75+.25*Math.sin((t-T0)/260), rgb = q.k==='ok'?[.22,.82,.55]:[.95,.36,.36];
   bx(b[0]-.3,b[1]-.3,b[2]-.3,b[3]+.6,b[4]+.6,b[5]+.6,rgb,{mode:2,a:(st.hoverT===q.id?.5:q.k==='ok'?.3:.1)*pl}); live = true; });
  if (dc) ghosts.forEach(q => { const sl = geo.find(x => x.id===q.id); if (!sl) return; const pl = .75+.25*Math.sin((t-T0)/260), rgb = {ok:[.22,.82,.55],warn:[1,.7,.28],bad:[.95,.36,.36]}[q.k];
   bx(sl.x,sl.y,sl.z,sl.w,sl.d,sl.h,rgb,{mode:2,a:(st.hover===q.id?.42:.16)*pl}); live = true; });
@@ -667,7 +799,7 @@ function build(t){
 }
 function refreshGhosts(){
  ghosts = []; tghosts.length = 0;
- if (st.view==='c' && st.cable){ B.targets(S).forEach(tg => { if (Object.values(S.connections).includes(tg.id)) return; const t2 = JSON.parse(JSON.stringify(S)), r = B.connect(t2,st.cable,tg.id); tghosts.push({id:tg.id, k:r.ok?'ok':'bad', msg:r.ok?'Conectar aquí':r.msg}); }); return; }
+ if (st.cable){ B.targets(S).forEach(tg => { if (Object.values(S.connections).includes(tg.id)) return; const t2 = JSON.parse(JSON.stringify(S)), r = B.connect(t2,st.cable,tg.id); tghosts.push({id:tg.id, k:r.ok?'ok':'bad', msg:r.ok?'Conectar aquí':r.msg}); }); return; }
  const dc = st.sel ? B.byId(st.sel) : null; if (!dc) return;
  slotGeom(dc).filter(sl => sl.cat===dc.cat).forEach(sl => { const t = JSON.parse(JSON.stringify(S)), r = B.install(t,sl.id,dc.id); ghosts.push({id:sl.id, k:r.ok?(r.warnings.length?'warn':'ok'):'bad', msg:r.ok?'Colocar aquí':r.msg}); });
 }
@@ -675,7 +807,7 @@ function refreshGhosts(){
 /* ---------- render ---------- */
 let eye = [0,0,0], right = [1,0,0], up2 = [0,1,0], fwd = [0,0,-1], SH = [0,0];
 function render(now){
- raf = 0; const t = now; if (!cam.drag){ cam.th += cam.vth; cam.vth *= .93; if (Math.abs(cam.vth)<1e-4) cam.vth = 0; }
+ raf = 0; const t = now, dt = Math.min(1/20, lastT ? (now-lastT)/1000 : 1/60); lastT = now; const moving = physStep(dt,t); if (!cam.drag){ cam.th += cam.vth; cam.vth *= .93; if (Math.abs(cam.vth)<1e-4) cam.vth = 0; }
  ex += (exT-ex)*.12; if (Math.abs(exT-ex)<.002) ex = exT;
  const live = build(t), ct = Math.cos(cam.ph);
  eye = [TG[0]+cam.d*Math.sin(cam.th)*ct, TG[1]+cam.d*Math.sin(cam.ph), TG[2]+cam.d*Math.cos(cam.th)*ct];
@@ -694,11 +826,11 @@ function render(now){
  gl.uniformMatrix4fv(UM.uVP,false,VP); gl.uniformMatrix4fv(UM.uLVP,false,LVP); gl.uniform3fv(UM.uCam,eye); gl.uniform3fv(UM.uL,Lv); gl.uniform3fv(UM.uSky,TH.sky); gl.uniform3fv(UM.uGnd,TH.gnd); gl.uniform3fv(UM.uBg,TH.bg);
  const draw = o => { gl.uniformMatrix4fv(UM.uM,false,mm(o)); gl.uniformMatrix3fv(UM.uR,false,o.R); gl.uniform3fv(UM.uSize,o.s); gl.uniform3fv(UM.uCol,o.col); gl.uniform1f(UM.uSpec,o.sp||0); gl.uniform1f(UM.uA,o.a); gl.uniform1f(UM.uBev,o.bev); gl.uniform1f(UM.uMat,o.mat||0); gl.uniform1i(UM.uMode,o.mode);
   const m = mesh1(o); gl.bindVertexArray(m.vao); gl.drawElements(gl.TRIANGLES,m.n,gl.UNSIGNED_SHORT,0); };
- draw({k:0,c:[22,-1.2,10],s:[500,.2,500],R:I3,col:TH.bg,sp:0,bev:0,mode:1,a:1});
+ draw({k:0,c:[22,-2.7,10],s:[500,.2,500],R:I3,col:TH.bg,sp:0,bev:0,mode:1,a:1});
  objs.filter(o => !o.mode).forEach(draw);
  gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false);
  objs.filter(o => o.mode).forEach(draw); gl.depthMask(true); gl.disable(gl.BLEND);
- if (live || ex!==exT || cam.vth || Object.keys(anims).length) go();
+ if (live || moving || ex!==exT || cam.vth || Object.keys(anims).length) go();
 }
 function go(){ if (!raf) raf = requestAnimationFrame(tm => { try { render(tm); } catch(err){ raf = 0; toast('Error de render: '+String(err.message||err).slice(0,140),'bad'); } }); }
 
@@ -714,7 +846,7 @@ function hitBox(d,b,off){ // b en cm del motor [x,y,z,w,d,h] → espacio GL
  return t0;
 }
 function pickList(px,py,list){ const d = ray(px,py); let best = null, bt = 1e9; list.forEach(q => { const t = hitBox(d,q.box,0); if (t!=null && t<bt){ bt = t; best = q.id; } }); return best; }
-const pickCable = (x,y) => pickList(x,y,cablePicks);
+const pickCable = (x,y) => { const d = ray(x,y); let best = null, bt = 1e9; cablePickS.forEach(q => { const k = raySphere(d,q.c,q.r); if (k!=null && k<bt){ bt = k; best = q.id; } }); return best; };
 const pickTarget = (x,y) => pickList(x,y,tghosts.map(q => { const b = targetBox(q.id); return {id:q.id, box:[b[0]-.4,b[1]-.4,b[2]-.4,b[3]+.8,b[4]+.8,b[5]+.8]}; }));
 function pickAt(px,py,candOnly){
  const d = ray(px,py); let best = null, bt = 1e9;
@@ -726,16 +858,16 @@ function pickAt(px,py,candOnly){
 /* ---------- interacción ---------- */
 function toast(msg,kind){ const t = $('toast'); t.textContent = msg; t.className = 'show '+(kind||''); clearTimeout(toastT); toastT = setTimeout(() => t.className = '', 4200); }
 const persist = () => B.save(S);
-function doInstall(slot,id){
+function doInstall(slot,id,amp){
  const r = B.install(S,slot,id), now = performance.now(); flash[slot] = {t:now,ok:r.ok};
- $('tip').style.display = 'none'; if (r.ok){ anims[slot] = now; st.sel = null; st.slot = null; st.hover = null; persist(); toast(r.msg+(r.warnings.length?' · Aviso: '+r.warnings[0]:''), r.warnings.length?'warn':'ok');
+ $('tip').style.display = 'none'; if (r.ok){ anims[slot] = now; animAmp[slot] = amp||10; snd('click'); st.sel = null; st.slot = null; st.hover = null; persist(); toast(r.msg+(r.warnings.length?' · Aviso: '+r.warnings[0]:''), r.warnings.length?'warn':'ok');
   const nx = B.steps(S).find(x => !x.done && !x.optional); if (nx){ const m = {case:'case',psu:'psu',mobo:'mobo',cpu:'cpu',paste:'cooler',cooler:'cooler',ram:'ram',storage:'storage',gpu:'gpu'}[nx.id]; if (m) st.chip = m; } }
- else toast(r.msg,'bad');
+ else { toast(r.msg,'bad'); snd('bad'); }
  refreshGhosts(); ui(); go();
 }
 function doConnect(cable,target){
  const r = B.connect(S,cable,target), now = performance.now(); flash['t:'+target] = {t:now, ok:r.ok};
- if (r.ok){ cableAnim[cable] = now; st.cable = null; persist(); toast(r.msg+' Es una comprobación visual, no eléctrica.','ok'); } else toast(r.msg,'bad');
+ if (r.ok){ if (ropes[cable]) ropes[cable].ins = {t0:now, from:ropes[cable].p[ROPE_N-1].slice()}; snd('plug'); st.cable = null; persist(); toast(r.msg+' Es una comprobación visual, no eléctrica.','ok'); } else { toast(r.msg,'bad'); snd('bad'); }
  refreshGhosts(); ui(); go();
 }
 function tap(x,y){
@@ -745,18 +877,27 @@ function tap(x,y){
  st.slot = pickAt(x,y,false); ui(); go();
 }
 const ptrs = new Map(); let moved = 0, pinch = 0; const pd = () => { const a = [...ptrs.values()]; return Math.hypot(a[0][0]-a[1][0],a[0][1]-a[1][1]); };
-cv.addEventListener('pointerdown', e => { cv.setPointerCapture(e.pointerId); ptrs.set(e.pointerId,[e.clientX,e.clientY]); moved = 0; cam.drag = true; cam.vth = 0; if (ptrs.size===2) pinch = pd(); });
+function grabAt(x,y){
+ const d = ray(x,y); let best = null, bt = 1e9;
+ cablePickS.forEach(q => { const k = raySphere(d,q.c,q.r); if (k!=null && k<bt){ bt = k; best = {kind:'plug',id:q.id}; } });
+ loose.forEach(b => { const c = B.byId(b.id); if (!c) return; const hs = hsRest(c,pieceInfo(c,canonSlot(c))), k = rayBox(d,[b.p[0]-hs[0],b.p[1]-hs[1],b.p[2]-hs[2]],[b.p[0]+hs[0],b.p[1]+hs[1],b.p[2]+hs[2]]); if (k!=null && k<bt){ bt = k; best = {kind:'loose',b}; } });
+ picks.forEach(p => { if (p.id==='case') return; p.boxes.forEach(b => { const k = hitBox(d,b,p.off); if (k!=null && k<bt){ bt = k; best = {kind:'slot',id:p.id}; } }); });
+ return best;
+}
+cv.addEventListener('pointerdown', e => { cv.setPointerCapture(e.pointerId); ptrs.set(e.pointerId,[e.clientX,e.clientY]); ptr = {x:e.clientX,y:e.clientY}; moved = 0; cam.drag = true; cam.vth = 0; if (ptrs.size===2){ pinch = pd(); cand = null; } else cand = hold ? null : grabAt(e.clientX,e.clientY); });
 cv.addEventListener('pointermove', e => {
+ ptr = {x:e.clientX,y:e.clientY}; if (hold) return;
  const p = ptrs.get(e.pointerId);
- if (drag) return;
- if (!p && st.view==='c'){ if (st.cable){ const s = pickTarget(e.clientX,e.clientY); if (s!==st.hoverT){ st.hoverT = s; go(); } const q = tghosts.find(g2 => g2.id===s), tip = $('tip'); tip.textContent = q ? q.msg : ''; tip.style.display = q ? 'block' : 'none'; tip.style.left = e.clientX+14+'px'; tip.style.top = e.clientY+14+'px'; } return; }
- if (!p){ if (st.sel){ const s = pickAt(e.clientX,e.clientY,true); if (s!==st.hover){ st.hover = s; go(); } const q = ghosts.find(g2 => g2.id===s), tip = $('tip');
-   tip.textContent = q ? q.msg : ''; tip.style.display = q ? 'block' : 'none'; tip.style.left = e.clientX+14+'px'; tip.style.top = e.clientY+14+'px'; } return; }
+ if (!p){ cv.style.cursor = grabAt(e.clientX,e.clientY) ? 'grab' : 'default'; const tip = $('tip');
+  if (st.cable){ const s = pickTarget(e.clientX,e.clientY); if (s!==st.hoverT){ st.hoverT = s; go(); } const q = tghosts.find(g2 => g2.id===s); tip.textContent = q ? q.msg : ''; tip.style.display = q ? 'block' : 'none'; tip.style.left = e.clientX+14+'px'; tip.style.top = e.clientY+14+'px'; }
+  else if (st.sel){ const s = pickAt(e.clientX,e.clientY,true); if (s!==st.hover){ st.hover = s; go(); } const q = ghosts.find(g2 => g2.id===s); tip.textContent = q ? q.msg : ''; tip.style.display = q ? 'block' : 'none'; tip.style.left = e.clientX+14+'px'; tip.style.top = e.clientY+14+'px'; }
+  return; }
  const dx = e.clientX-p[0], dy = e.clientY-p[1]; p[0] = e.clientX; p[1] = e.clientY; moved += Math.abs(dx)+Math.abs(dy);
+ if (ptrs.size===1 && cand){ if (moved>8){ startGrab(cand,e); cand = null; } return; }
  if (ptrs.size===1){ cam.th -= dx*.007; cam.vth = -dx*.007; cam.ph = Math.max(.05,Math.min(1.3,cam.ph+dy*.005)); } else { const d = pd(); cam.d = Math.max(55,Math.min(220,cam.d*pinch/d)); pinch = d; }
  go();
 });
-const up = e => { if (ptrs.size===1 && moved<6 && e.type==='pointerup') tap(e.clientX,e.clientY); ptrs.delete(e.pointerId); if (!ptrs.size) cam.drag = false; go(); };
+const up = e => { if (hold){ ptrs.delete(e.pointerId); if (!ptrs.size) cam.drag = false; return; } if (ptrs.size===1 && moved<6 && e.type==='pointerup') tap(e.clientX,e.clientY); ptrs.delete(e.pointerId); if (!ptrs.size) cam.drag = false; cand = null; go(); };
 cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
 cv.addEventListener('wheel', e => { e.preventDefault(); cam.d = Math.max(55,Math.min(220,cam.d*(e.deltaY<0?.92:1.08))); go(); }, {passive:false});
 
@@ -823,7 +964,7 @@ function ui(){
   '<h3>Conexiones pendientes</h3>'+(f.connectionsPending.length?'<ul class="cond">'+li(f.connectionsPending)+'</ul>':'<p class="m">Ninguna.</p>')+
   (f.errors.length?'<h3>Errores</h3><ul class="bad">'+li(f.errors)+'</ul>':'')+(f.conditions.length?'<h3>Condiciones</h3><ul class="cond">'+li(f.conditions)+'</ul>':'')+(f.pending.length?'<h3>Pendiente de verificar</h3><ul>'+li(f.pending)+'</ul>':'')+
   '<h3>Pasos completados</h3><p class="m">'+sd.length+' de '+list.length+'</p><h3>Lista de compra</h3><p class="m">Sin precios ni enlaces: catálogo de demostración.</p><small>'+f.disclaimer+'</small></div>';
- $('ccount').textContent = B.CATALOG.filter(x => x.demo).length+' de demostración · '+B.CATALOG.filter(x => x.user).length+' importadas'; $('sum').style.display = st.view==='s' ? 'block' : 'none'; $('pnl').textContent = glass ? 'Cerrar panel lateral' : 'Abrir panel lateral';
+ $('ccount').textContent = B.CATALOG.filter(x => x.demo).length+' de demostración · '+B.CATALOG.filter(x => x.user).length+' importadas'; $('sum').style.display = st.view==='s' ? 'block' : 'none'; $('snd').textContent = 'Sonido: '+(muted?'silenciado':'activado'); $('pnl').textContent = glass ? 'Cerrar panel lateral' : 'Abrir panel lateral';
  $('vw').innerHTML = [['vm','m','Montaje'],['vc','c','Conexiones'],['vs','s','Resumen']].map(v => '<button id="'+v[0]+'" class="vt'+(st.view===v[1]?' on':'')+'">'+v[2]+'</button>').join('');
 }
 document.addEventListener('click', e => {
@@ -848,6 +989,7 @@ document.addEventListener('click', e => {
  if (id==='skip'){ const nx = nextStep(); if (nx) st.skip[nx.id] = true; ui(); }
  if (id==='unc'){ const r = B.disconnect(S,st.cable); toast(r.msg,r.ok?'ok':'bad'); st.cable = null; persist(); refreshGhosts(); ui(); go(); }
  if (id==='pbtn'){ $('panel').classList.toggle('open'); }
+ if (id==='snd'){ muted = !muted; try { localStorage.setItem('buildlab.mute',muted?'1':'0'); } catch(_){} if (!muted) snd('pick'); ui(); return; }
  if (id==='pnl'){ glass = !glass; ui(); go(); }
  if (id==='rv'){ cam.th = .55; cam.ph = .36; cam.d = 128; cam.vth = 0; go(); }
  if (id==='reset'){ S = B.newState(); st.sel = st.slot = st.cable = null; st.view = 'm'; st.skip = {}; st.autoc = false; st.mode = 'g'; st.chip = 'case'; exT = 0; $('exr').value = 0; persist(); refreshGhosts(); toast('Montaje reiniciado.'); ui(); go(); }
@@ -863,23 +1005,39 @@ function slotNear(x,y){
  ghosts.forEach(q => { const sl = geo.find(s => s.id===q.id); if (!sl) return; const p = toScreen([sl.x+sl.w/2,sl.z+sl.h/2,sl.y+sl.d/2]), d = Math.hypot(p[0]-x,p[1]-y); if (d<bd){ bd = d; best = q.id; } });
  return best;
 }
-const dg = $('dg');
-$('items').addEventListener('pointerdown', e => { const c = e.target.closest('.cell'); if (c) pend = {id:c.dataset.id, x:e.clientX, y:e.clientY}; });
+$('items').addEventListener('pointerdown', e => { const c = e.target.closest('.cell'); if (c && c.dataset.id) pend = {id:c.dataset.id, x:e.clientX, y:e.clientY}; });
 document.addEventListener('pointermove', e => {
- if (pend && !drag){ const dx = e.clientX-pend.x, dy = e.clientY-pend.y;
-  if (Math.hypot(dx,dy)>8 && (e.pointerType!=='touch' || Math.abs(dy)>Math.abs(dx))){ drag = pend.id; st.sel = drag; st.slot = null; refreshGhosts(); dg.textContent = B.byId(drag).name; dg.style.display = 'block';
-   document.querySelectorAll('.cell').forEach(c => c.classList.toggle('sel', c.dataset.id===drag)); go(); } }
- if (drag){ dg.style.left = e.clientX+'px'; dg.style.top = e.clientY+'px';
-  const over = document.elementFromPoint(e.clientX,e.clientY)===cv, s = over ? slotNear(e.clientX,e.clientY) : null; if (s!==st.hover) st.hover = s;
-  const q = ghosts.find(g2 => g2.id===s), tip = $('tip'); tip.textContent = q ? q.msg : ''; tip.style.display = q ? 'block' : 'none'; tip.style.left = e.clientX+16+'px'; tip.style.top = e.clientY+16+'px'; go(); }
+ ptr = {x:e.clientX,y:e.clientY};
+ if (pend && !hold){ const dx = e.clientX-pend.x, dy = e.clientY-pend.y;
+  if (Math.hypot(dx,dy)>8 && (e.pointerType!=='touch' || Math.abs(dy)>Math.abs(dx))){ const id = pend.id; pend = null; startTrayHold(id); document.querySelectorAll('.cell').forEach(c => c.classList.toggle('sel', c.dataset.id===id)); } }
+ if (hold){ const tip = $('tip'); let q = null;
+  if (hold.kind==='piece'){ const over = document.elementFromPoint(e.clientX,e.clientY)===cv; st.hover = over ? slotNear(e.clientX,e.clientY) : null; q = ghosts.find(g2 => g2.id===st.hover); }
+  else q = tghosts.find(g2 => g2.id===st.hoverT);
+  tip.textContent = q ? q.msg : ''; tip.style.display = q ? 'block' : 'none'; tip.style.left = e.clientX+16+'px'; tip.style.top = e.clientY+16+'px'; go(); }
 });
-function endDrag(drop){
- if (drag){ const id = drag, s = st.hover; drag = null; dg.style.display = 'none'; $('tip').style.display = 'none'; supp = true; setTimeout(() => supp = false, 80); st.hover = null;
-  if (drop && s) doInstall(s,id); else { st.sel = null; refreshGhosts(); if (drop) toast('Suelta la pieza sobre una zona resaltada.'); ui(); go(); } }
- pend = null;
+function releasePiece(h,e,drop){
+ const c = B.byId(h.id), over = document.elementFromPoint(e.clientX,e.clientY), onTray = over && over.closest && over.closest('#tray'), slot = st.hover, g = slot && ghosts.find(q => q.id===slot), now = performance.now();
+ st.sel = null; st.hover = null;
+ const toDesk = () => { const p = h.p.slice(), hs = hsRest(c,pieceInfo(c,canonSlot(c))); if (inCase(p)){ p[2] = 24+hs[2]; p[1] = Math.max(p[1],GROUND+hs[1]+10); }
+  loose.push({id:h.id,p,v:h.v.slice(),yaw:h.yaw,yv:(Math.random()-.5)*3,ax:h.ax,az:h.az,tv:[0,0],sq:h.sq,sqv:0}); if (loose.length>12){ loose.shift(); toast('Demasiadas piezas sueltas: la más antigua vuelve a la bandeja.'); } };
+ const back = () => { if (h.origin.t==='slot'){ const r = B.install(S,h.origin.slot,h.id); if (r.ok){ anims[h.origin.slot] = now; animAmp[h.origin.slot] = 4; persist(); snd('click'); return; } } toDesk(); };
+ if (!drop) back();
+ else if (onTray){ toast('Pieza devuelta a la bandeja.'); snd('pick'); }
+ else if (g && g.k!=='bad'){ const r = B.install(S,slot,h.id); if (r.ok){ anims[slot] = now; animAmp[slot] = 3; flash[slot] = {t:now,ok:true}; persist(); snd('click'); toast(r.msg+(r.warnings.length?' · Aviso: '+r.warnings[0]:''), r.warnings.length?'warn':'ok'); } else { toast(r.msg,'bad'); snd('bad'); back(); } }
+ else if (g){ toast(g.msg,'bad'); snd('bad'); back(); }
+ else if (inCase(h.p)){ toast('Suéltala sobre una zona resaltada o fuera de la caja.'); back(); }
+ else { toDesk(); snd('pick'); }
+ refreshGhosts(); ui(); go();
 }
-document.addEventListener('pointerup', () => endDrag(true)); document.addEventListener('pointercancel', () => endDrag(false));
-
+function releasePlug(h,drop){
+ const r = ropes[h.id], nt = st.hoverT; if (r) r.held = null; st.cable = null; st.hoverT = null;
+ if (drop && nt) doConnect(h.id,nt); else { if (drop) toast('Acerca el enchufe a un conector resaltado para conectarlo.'); refreshGhosts(); ui(); go(); }
+}
+function endHold(e,drop){
+ if (!hold){ pend = null; return; } const h = hold; hold = null; document.body.style.cursor = ''; supp = true; setTimeout(() => supp = false, 80); $('tip').style.display = 'none';
+ if (h.kind==='plug') releasePlug(h,drop); else releasePiece(h,e,drop); pend = null;
+}
+document.addEventListener('pointerup', e => endHold(e,true)); document.addEventListener('pointercancel', e => endHold(e,false));
 function showImport(r){ $('cres').innerHTML = '<p class="m">'+r.added+' nuevas · '+r.updated+' actualizadas</p>'+r.errors.map(x => '<p class="r bad">'+esc(x)+'</p>').join('')+r.warnings.slice(0,30).map(x => '<p class="r cond">'+esc(x)+'</p>').join('')+(r.warnings.length>30?'<p class="m">… y '+(r.warnings.length-30)+' avisos más.</p>':''); }
 $('cfile').addEventListener('change', e => { const f = e.target.files && e.target.files[0]; if (!f) return; if (f.size>2e6){ toast('El archivo supera 2 MB.','bad'); return; } const rd = new FileReader(); rd.onload = () => { $('cio').value = String(rd.result); const r = B.importCatalog(rd.result); showImport(r); toast(r.added||r.updated ? 'Catálogo actualizado: '+r.added+' nuevas, '+r.updated+' actualizadas.' : 'No se importó ninguna pieza.', r.added||r.updated?'ok':'bad'); refreshGhosts(); ui(); go(); }; rd.readAsText(f); e.target.value = ''; });
 $('items').addEventListener('error', e => { if (e.target && e.target.tagName==='IMG') e.target.remove(); }, true);
@@ -891,6 +1049,6 @@ function resize(){
 if (!gl){ $('fb').hidden = false; ui(); }
 else { try { initGL(); theme(); matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { theme(); go(); }); addEventListener('resize', resize); ui(); resize(); document.body.classList.add('ready'); }
  catch(err){ $('fb').hidden = false; $('fbd').textContent = String(err.message||err).slice(0,200); } }
-window.BuildLabUI = {get state(){ return S; }, render, build, slotGeom};
+window.BuildLabUI = {toScreen, get state(){ return S; }, get hold(){ return hold; }, loose, ropes, st, render, build, slotGeom, physStep, startGrab, startTrayHold, endHold, grabAt, setPtr(x,y){ ptr = {x,y}; }, refreshGhosts, ROPE_N, GROUND, targetBox, plugPoint};
 })();
 </script></body></html>
